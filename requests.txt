@@ -1,0 +1,123 @@
+
+--Ime, prezime, spol (ispisati ‘MUŠKI’, ‘ŽENSKI’, ‘NEPOZNATO’, ‘OSTALO’), 
+--ime države i prosječna plaća u toj državi za svakog trenera.
+
+SELECT tr.name, tr.surname, tr.gender, c.name, c.averageSalary FROM trainers tr
+JOIN fitnesscenters fc ON tr.fcId = fc.id
+JOIN countries c ON c.id = fc.countryId
+
+
+--Naziv i termin održavanja svake sportske igre zajedno s imenima glavnih trenera 
+--(u formatu Prezime, I.; npr. Horvat, M.; Petrović, T.)
+
+SELECT act.typeact, act.timeAct, tr.surname, SUBSTRING(tr.name, 1, 1) FROM activities act
+JOIN trainers tr ON tr.id = act.mainTrainerId
+
+
+--Top 3 fitness centra s najvećim brojem aktivnosti u rasporedu
+
+SELECT fc.name, COUNT(act.id) AS activitCount FROM fitnessCenters fc
+JOIN activities act ON act.fcId = fc.id
+GROUP BY fc.name
+ORDER BY activitCount DESC
+LIMIT 3;
+
+
+--Po svakom terneru koliko trenutno aktivnosti vodi; ako nema aktivnosti, ispiši 
+--“DOSTUPAN”, ako ima do 3 ispiši “AKTIVAN”, a ako je na više ispiši “POTPUNO ZAUZET”.
+
+SELECT tr.name, COUNT(DISTINCT act.id) + COUNT(DISTINCT at.activityId) AS totalActivities,
+CASE
+	WHEN COUNT(DISTINCT act.id) + COUNT(DISTINCT at.activityId) = 0 THEN 'DOSTUPAN'
+    WHEN COUNT(DISTINCT act.id) + COUNT(DISTINCT at.activityId) <= 3 THEN 'AKTIVAN'
+    ELSE 'POTPUNO ZAUZET'
+	END AS status
+FROM trainers tr
+JOIN activities act ON act.mainTrainerId = tr.id
+JOIN activityTrainers at ON at.trainerId = tr.id
+GROUP BY 
+    tr.id, tr.name;
+
+
+--Imena svih članova koji trenutno sudjeluju na nekoj aktivnosti.
+
+SELECT u.name FROM users u
+JOIN activitiesUsers au ON au.userId = u.id
+JOIN activities act ON au.activityId = act.id
+WHERE startDate <= CURRENT_DATE AND endDate >= CURRENT_DATE
+
+
+--Sve trenere koji su vodili barem jednu aktivnost između 2019. i 2022.
+
+SELECT DISTINCT tr.name
+FROM trainers tr
+JOIN activities act ON act.mainTrainerId = tr.id
+JOIN activityTrainers atr ON atr.trainerId = tr.id
+WHERE act.startDate BETWEEN '2019-01-01' AND '2022-12-31' 
+   OR act.endDate BETWEEN '2019-01-01' AND '2022-12-31';
+
+
+--Prosječan broj sudjelovanja po tipu aktivnosti po svakoj državi.
+SELECT 
+    c.name AS countryName,
+    a.typeAct AS activityType,
+    COUNT(au.userId) * 1.0 / COUNT(DISTINCT a.id) AS averageParticipation
+FROM countries c
+JOIN fitnessCenters fc ON c.id = fc.countryId
+JOIN activities a ON fc.id = a.fcId
+LEFT JOIN activitiesUsers au ON a.id = au.activityId
+GROUP BY c.name, a.typeAct
+ORDER BY c.name, a.typeAct;
+
+
+--Top 10 država s najvećim brojem sudjelovanja u injury rehabilitation tipu aktivnosti
+SELECT 
+    c.name AS countryName,
+    COUNT(au.userId) AS totalParticipation
+FROM countries c
+JOIN fitnessCenters fc ON c.id = fc.countryId
+JOIN activities a ON fc.id = a.fcId
+JOIN activitiesUsers au ON a.id = au.activityId
+WHERE a.typeAct = 'injury rehabilitation'
+GROUP BY c.name
+ORDER BY totalParticipation DESC
+LIMIT 10;
+
+
+--Ako aktivnost nije popunjena, ispiši uz nju “IMA MJESTA”, a ako je popunjena ispiši “POPUNJENO”
+SELECT 
+    a.id AS activityId,
+    a.typeAct AS activityType,
+    a.capacity AS maxCapacity,
+    COUNT(au.userId) AS currentParticipation,
+    CASE 
+        WHEN COUNT(au.userId) < a.capacity THEN 'IMA MJESTA'
+        ELSE 'POPUNJENO'
+    END AS status
+FROM activities a
+LEFT JOIN activitiesUsers au ON a.id = au.activityId
+GROUP BY a.id, a.typeAct, a.capacity
+ORDER BY a.id;
+
+
+--10 najplaćenijih trenera, ako po svakoj aktivnosti dobije prihod kao brojSudionika * cijenaPoTerminu
+
+SELECT DISTINCT
+    t.id AS trainerId,
+    t.name AS trainerName,
+    t.surname AS trainerSurname,
+    SUM(a.price * sub.userCount) OVER (PARTITION BY t.id) AS totalEarnings
+FROM trainers t
+JOIN activities a ON t.id = a.mainTrainerId
+JOIN (
+    SELECT au.activityId, COUNT(au.userId) AS userCount
+    FROM activitiesUsers au
+    GROUP BY au.activityId
+) sub ON a.id = sub.activityId
+ORDER BY totalEarnings DESC
+LIMIT 10;
+
+
+
+
+

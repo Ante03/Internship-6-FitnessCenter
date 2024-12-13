@@ -1,0 +1,78 @@
+CREATE TABLE countries(
+	id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name VARCHAR(100) NOT NULL,
+	averageSalary FLOAT NOT NULL
+);
+
+CREATE TABLE fitnessCenters(
+	id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name VARCHAR(100) NOT NULL,
+	workingHours VARCHAR(100) NOT NULL,
+	countryId INT REFERENCES countries(id)
+);
+
+CREATE TABLE activities (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    typeAct VARCHAR(50) NOT NULL,
+    timeAct VARCHAR(50) NOT NULL,
+    startDate DATE NOT NULL,
+    endDate DATE NOT NULL,
+    capacity INT NOT NULL,
+    price FLOAT NOT NULL,
+    fcId INT REFERENCES fitnessCenters(id),
+    mainTrainerId INT REFERENCES trainers(id)
+);
+
+ALTER TABLE activities
+ADD CONSTRAINT check_activity_type CHECK (typeAct IN ('trening snage', 'kardio', 'yoga', 'ples', 'injury rehabilitation'));
+
+CREATE TABLE trainers (
+    id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    surname VARCHAR(50) NOT NULL,
+    gender VARCHAR(50) CHECK (gender IN ('MUSKI', 'ZENSKI', 'NEPOZNATO', 'OSTALO')) NOT NULL,
+    birthDate DATE NOT NULL,
+    fcId INT REFERENCES fitnessCenters(id)
+);
+
+CREATE TABLE users(
+	id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+	name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE activitiesUsers(
+	userId INT REFERENCES users(id),
+	activityId INT REFERENCES activities(id),
+	PRIMARY KEY(userId, activityId)	
+);
+
+CREATE TABLE activityTrainers (
+    activityId INT REFERENCES activities(id),
+    trainerId INT REFERENCES trainers(id),
+    role VARCHAR(10) CHECK (role = 'pomoćni') NOT NULL,
+    PRIMARY KEY(activityId, trainerId)
+);
+
+CREATE FUNCTION check_trainer_main_activities()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (
+        SELECT COUNT(*)
+        FROM activities
+        WHERE mainTrainerId = NEW.mainTrainerId
+    ) > 2 THEN
+        RAISE EXCEPTION 'Trener može biti glavni samo u dvije aktivnosti.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_trainer_activities_trigger
+BEFORE INSERT OR UPDATE ON activities
+FOR EACH ROW
+EXECUTE FUNCTION check_trainer_main_activities();
+
+ALTER TABLE activities DISABLE TRIGGER check_trainer_activities_trigger;
+
+ALTER TABLE activities ENABLE TRIGGER check_trainer_activities_trigger;
+
